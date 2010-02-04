@@ -1,0 +1,11 @@
+= pubmed
+
+Simple utility for searching and retrieving articles from PubMed via the 
+Entrez Programming Utilities <http://eutils.ncbi.nlm.nih.gov/>.
+
+Required: nokogiri
+Required: rest-client
+
+== Copyright
+
+Copyright (c) 2010 Matt Grayson. See LICENSE for details.
