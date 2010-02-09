@@ -10,7 +10,7 @@ module PubMed
 
     class Parser::XMLNokogiriDoc < HTTParty::Parser
       def parse
-        {:doc => Nokogiri.parse(body), :raw_xml => body}
+        Nokogiri.parse(body)
       end
     end
     parser Parser::XMLNokogiriDoc
@@ -33,7 +33,7 @@ module PubMed
         :email => @email_address,
         :term => query
       }.update(options)
-      response, raw = self.class.get(@search_uri, :query => query_options)
+      response = self.class.get(@search_uri, :query => query_options)
       results = {
         :total_found => response.at(".//eSearchResult/Count") ? response.at(".//eSearchResult/Count").text : '',
         :query_key => response.at(".//eSearchResult/QueryKey") ? response.at(".//eSearchResult/QueryKey").text : '',
