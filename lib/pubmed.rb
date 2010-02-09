@@ -8,12 +8,12 @@ module PubMed
     include HTTParty
     base_uri 'http://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
 
-    class Parser::Nokogiri < HTTParty::Parser
+    class Parser::XMLNokogiriDoc < HTTParty::Parser
       def parse
         Nokogiri.parse(body)
       end
     end
-    parser Parser::Nokogiri
+    parser Parser::XMLNokogiriDoc
     
     attr_accessor :search_results, :last_query, :email_address, :search_uri
     
