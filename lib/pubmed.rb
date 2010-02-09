@@ -10,7 +10,7 @@ module PubMed
 
     class Parser::XMLNokogiriDoc < HTTParty::Parser
       def parse
-        Nokogiri.parse(body)
+        {:doc => Nokogiri.parse(body), :raw_xml => body}
       end
     end
     parser Parser::XMLNokogiriDoc
@@ -33,11 +33,11 @@ module PubMed
         :email => @email_address,
         :term => query
       }.update(options)
-      response = self.class.get(@search_uri, :query => query_options)
+      response, raw = self.class.get(@search_uri, :query => query_options)
       results = {
-        :total_found => response.at(".//eSearchResult/Count") ? response.at(".//eSearchResult/Count") : '',
-        :query_key => response.at(".//eSearchResult/QueryKey") ? response.at(".//eSearchResult/QueryKey") : '',
-        :web_env => response.at(".//eSearchResult/WebEnv") ? response.at(".//eSearchResult/WebEnv") : '',
+        :total_found => response.at(".//eSearchResult/Count") ? response.at(".//eSearchResult/Count").text : '',
+        :query_key => response.at(".//eSearchResult/QueryKey") ? response.at(".//eSearchResult/QueryKey").text : '',
+        :web_env => response.at(".//eSearchResult/WebEnv") ? response.at(".//eSearchResult/WebEnv").text : '',
       }
       if autofetch
         total = options.has_key?(:retmax) ? options[:retmax] : results[:total_found]
@@ -47,7 +47,7 @@ module PubMed
           total
         )
       else
-        results[:pmids] = response.xpath('.//eSearchResult/IdList/Id').collect {|id| id.content }
+        results[:pmids] = response.xpath('.//eSearchResult/IdList/Id').collect {|id| id.text }
       end
       results
     end
