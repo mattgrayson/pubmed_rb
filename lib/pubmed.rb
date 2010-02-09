@@ -8,12 +8,12 @@ module PubMed
     include HTTParty
     base_uri 'http://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
 
-    class Parser::Simple < HTTParty::Parser
+    class Parser::Nokogiri < HTTParty::Parser
       def parse
-        body
+        Nokogiri.parse(body)
       end
     end
-    parser Parser::Simple
+    parser Parser::Nokogiri
     
     attr_accessor :search_results, :last_query, :email_address, :search_uri
     
@@ -35,9 +35,9 @@ module PubMed
       }.update(options)
       response = self.class.get(@search_uri, :query => query_options)
       results = {
-        :total_found => response["eSearchResult"]["Count"],
-        :query_key => response["eSearchResult"]["QueryKey"],
-        :web_env => response["eSearchResult"]["WebEnv"]
+        :total_found => response.at(".//eSearchResult/Count") ? response.at(".//eSearchResult/Count") : '',
+        :query_key => response.at(".//eSearchResult/QueryKey") ? response.at(".//eSearchResult/QueryKey") : '',
+        :web_env => response.at(".//eSearchResult/WebEnv") ? response.at(".//eSearchResult/WebEnv") : '',
       }
       if autofetch
         total = options.has_key?(:retmax) ? options[:retmax] : results[:total_found]
@@ -47,7 +47,7 @@ module PubMed
           total
         )
       else
-        results[:pmids] = response["eSearchResult"]["IdList"]["Id"]
+        results[:pmids] = response.xpath('.//eSearchResult/IdList/Id').collect {|id| id.content }
       end
       results
     end
