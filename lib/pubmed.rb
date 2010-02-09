@@ -1,12 +1,19 @@
 #!/usr/bin/env ruby
 require 'httparty'
+require 'nokogiri'
 
 module PubMed
   class Entrez
     
     include HTTParty
     base_uri 'http://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
-    format :xml
+
+    class Parser::Simple < HTTParty::Parser
+      def parse
+        body
+      end
+    end
+    parser Parser::Simple
     
     attr_accessor :search_results, :last_query, :email_address, :search_uri
     
