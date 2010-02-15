@@ -44,7 +44,7 @@ module PubMed
         results[:articles] = fetch_search_results(
           results[:web_env], 
           results[:query_key], 
-          total
+          total.to_i
         )
       else
         results[:pmids] = doc.xpath('eSearchResult/IdList/Id').collect(&:text)
@@ -83,15 +83,18 @@ module PubMed
         a[:title] = article.xpath('MedlineCitation/Article/ArticleTitle').text
         a[:authors] = []
         article.xpath('MedlineCitation/Article/AuthorList/Author[@ValidYN="Y"]').each do |auth|
-          last_name = auth.xpath('LastName').text
-          first_name = auth.xpath('Initials') ? auth.xpath('Initials').text : auth.xpath('ForeName').text
-          a[:authors] << "#{last_name} #{first_name}"
+          if auth.xpath('LastName')
+            last_name = auth.xpath('LastName').text
+            first_name = auth.xpath('Initials') ? auth.xpath('Initials').text : auth.xpath('ForeName').text
+            a[:authors] << "#{last_name} #{first_name}"
+          end
         end
         
         a[:affiliation] = article.xpath('MedlineCitation/Article/Affiliation').text
         a[:abstract] = article.xpath('MedlineCitation/Article/Abstract/AbstractText').text
         a[:abstract_copyright] = article.xpath('MedlineCitation/Article/Abstract/CopyrightInformation').text
         a[:pubmed_status] = article.xpath('PubmedData/PublicationStatus').text
+        a[:medline_status] = article.xpath('MedlineCitation').attribute('Status').text
         
         # Journal details
         journal = {}
@@ -103,16 +106,21 @@ module PubMed
         
         # Citation
         # -- basic details
-        citation = {}
-        citation[:pages] = article.xpath('MedlineCitation/Article/Pagination/MedlinePgn').text
-        citation[:volume] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/Volume').text
-        citation[:issue] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/Issue').text
+        a[:pages] = article.xpath('MedlineCitation/Article/Pagination/MedlinePgn').text
+        a[:volume] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/Volume').text
+        a[:issue] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/Issue').text
         # -- pub date
-        year = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/Year').text
-        month = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/Month').text
-        day = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/Day').text
-        citation[:date] = "#{year} #{month} #{day}"        
-        a[:citation] = citation
+        a[:medline_date] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/MedlineDate').text
+        if a[:medline_date] != ""
+          a[:pubdate_year] = article.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Year').text
+          a[:pubdate_month] = article.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Month').text
+          a[:pubdate_day] = article.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Day').text
+        else
+          a[:pubdate_year] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/Year').text
+          a[:pubdate_month] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/Month').text
+          a[:pubdate_day] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/Day').text
+        end
+        a[:pubdate] = "#{a[:pubdate_year]} #{a[:pubdate_month]} #{a[:pubdate_day]}"
         
         # MeSH headings
         a[:subjects] = []
@@ -120,12 +128,12 @@ module PubMed
           desc = subj.xpath('DescriptorName')
           desc_name = desc.text
           desc_is_major = desc.attribute('MajorTopicYN').text == 'Y' ? true : false
-          a[:subjects] << {:name => desc_name, :is_major => desc_is_major}
+          a[:subjects] << {:name => desc_name, :qualifier => "", :is_major => desc_is_major}
           
           subj.xpath('QualifierName').each do |qual|
             qual_name = qual.text
             qual_is_major = qual.attribute('MajorTopicYN').text == 'Y' ? true : false
-            a[:subjects] << {:name => "#{desc_name}/#{qual_name}", :is_major => qual_is_major}
+            a[:subjects] << {:name => desc_name, :qualifier => qual_name, :is_major => qual_is_major}
           end
         end
         
