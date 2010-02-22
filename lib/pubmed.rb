@@ -82,7 +82,7 @@ module PubMed
         a[:pmid] = article.xpath('MedlineCitation/PMID').text
         a[:title] = article.xpath('MedlineCitation/Article/ArticleTitle').text
         a[:authors] = []
-        article.xpath('MedlineCitation/Article/AuthorList/Author[@ValidYN="Y"]').each do |auth|
+        article.xpath('MedlineCitation/Article/AuthorList/Author').each do |auth|
           if auth.xpath('LastName')
             last_name = auth.xpath('LastName').text
             first_name = auth.xpath('Initials') ? auth.xpath('Initials').text : auth.xpath('ForeName').text
@@ -97,12 +97,12 @@ module PubMed
         a[:medline_status] = article.xpath('MedlineCitation').attribute('Status').text
         
         # Journal details
-        journal = {}
-        journal[:name] = article.xpath('MedlineCitation/Article/Journal/Title').text
-        journal[:name_abbrv] = article.xpath('MedlineCitation/MedlineJournalInfo/MedlineTA').text
-        journal[:issn_online] = article.xpath('MedlineCitation/Article/Journal/ISSN[@IssnType="Electronic"]').text
-        journal[:issn_print] = article.xpath('MedlineCitation/Article/Journal/ISSN[@IssnType="Print"]').text
-        a[:journal] = journal
+        a[:journal] = {}
+        a[:journal][:name] = article.xpath('MedlineCitation/Article/Journal/Title').text
+        a[:journal][:name_abbrv] = article.xpath('MedlineCitation/MedlineJournalInfo/MedlineTA').text
+        a[:journal][:issn_online] = article.xpath('MedlineCitation/Article/Journal/ISSN[@IssnType="Electronic"]').text
+        a[:journal][:issn_print] = article.xpath('MedlineCitation/Article/Journal/ISSN[@IssnType="Print"]').text
+        a[:journal][:nlm_unique_id] = article.xpath('MedlineCitation/MedlineJournalInfo/NlmUniqueID').text
         
         # Citation
         # -- basic details
