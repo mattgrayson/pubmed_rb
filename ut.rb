@@ -5,37 +5,53 @@ require 'mongo_mapper'
 
 MongoMapper.database = 'utpub'
 
-class MeshTerm
-  include MongoMapper::EmbeddedDocument
-  
-  key :name, String
-  key :qualifier, String
-  key :name_with_qualifier, String
-  key :is_major, Boolean
-  
-#  before_save :update_name_with_qualifier
-
-#  def update_name_with_qualifier
-#    unless self.qualifier == '' or self.qualifier == nil
-#      self.name_with_qualifier = "#{name}/#{qualifier}"
-#    else
-#      self.name_with_qualifier = name
-#    end
-#  end
-end
 
 class Journal
-  include MongoMapper::EmbeddedDocument
+  include MongoMapper::Document
   
   key :name, String
   key :name_abbrv, String
   key :issn_online, String
   key :issn_print, String
   key :nlm_unique_id, String
+  key :total_articles, Integer, :default => 0
+  
+  many :articles  
+  many :latest_articles, :class_name => 'Article', :order => 'updated_at desc', :limit => 5
+end
+
+class MeshTerm
+  include MongoMapper::Document
+  
+  key :name, String
+  key :qualifier, String
+  key :name_with_qualifier, String
+  
+  before_save :update_name_with_qualifier
+
+  protected
+    def update_name_with_qualifier
+      unless self.qualifier == '' or self.qualifier == nil
+        self.name_with_qualifier = "#{name}/#{qualifier}"
+      else
+        self.name_with_qualifier = name
+      end
+    end
+end
+
+class Classification
+  include MongoMapper::EmbeddedDocument
+
+  key :mesh_term, MeshTerm
+  key :is_major, Boolean, :default => false
 end
 
 class Article
   include MongoMapper::Document
+  plugin MongoMapper::Plugins::IdentityMap
+  
+  after_save :update_journal
+  after_destroy :update_journal
   
   key :pmid, String
   key :title, String  
@@ -52,13 +68,31 @@ class Article
   key :pubdate_year, String 
   key :pubdate_month, String 
   key :pubdate_day, String 
-  key :pubdate, String 
-  
-  key :journal
-  many :mesh_terms
-  
+  key :pubdate, String
   key :raw, String
   timestamps!
+  
+  key :journal_id, ObjectId
+  belongs_to :journal
+  
+  many :classifications  
+ 
+  def terms
+    classifications.collect{|c| c.mesh_term }
+  end
+  
+  def major_terms
+    c = classifications.select{|c| c.is_major == true }
+    c.collect{|c| c.mesh_term }
+  end
+
+  protected
+  
+    def update_journal
+      self.journal.update_attributes(
+        :total_articles => Article.count(:journal_id => self.journal_id)
+      )
+    end
 end
 
 if $0 == __FILE__
@@ -76,10 +110,7 @@ if $0 == __FILE__
       end
       a.delete(:subjects)
       
-      j = Journal.first_or_create(:nlm_unique_id => a[:journal][:nlm_unique_id])
-      j.update_attributes(a[:journal])
-      j.save
-      pub.journal = j
+      pub.journal = Journal.new(a[:journal])
       a.delete(:journal)
       
       pub.update_attributes(a)
