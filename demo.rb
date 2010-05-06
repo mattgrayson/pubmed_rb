@@ -31,9 +31,9 @@ if $0 == __FILE__
   OR ("uthsc"[Affiliation] AND "tennessee"[Affiliation])'
   
   if ARGV.length == 0
-    results = pm.search QUERY, true, {:retmax => 500}
+    results = pm.search QUERY, true, {"retmax" => 2500}
   elsif ARGV.length == 1
-    results = pm.search "#{ARGV[0]}[uid]", true, {:retmax => 1}
+    results = pm.search "#{ARGV[0]}[uid]", true, {"retmax" => 1}
   end
   
   results[:articles].each do |a|

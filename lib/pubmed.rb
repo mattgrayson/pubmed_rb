@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 require 'chronic'
-require 'httparty'
+require 'typhoeus'
 require 'nokogiri'
 
 module PubMed
@@ -9,44 +9,37 @@ module PubMed
     MEDLINEDATE_YEAR_MONTH = Regexp.new('^(\d{4}) (\w{3})[\s-]')
     MEDLINEDATE_YEAR_SEASON = Regexp.new('^(\d{4}) (\w+)[\s-]')
     MEDLINEDATE_YEAR = Regexp.new('^\d{4}')
-    
-    include HTTParty
-    base_uri 'http://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
+    BASE_URI = 'http://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
 
-    class Parser::NokogiriXML < HTTParty::Parser
-      def parse
-        Nokogiri.parse(body)
-      end
-    end
-    parser Parser::NokogiriXML
-    
     attr_accessor :search_results, :last_query, :email_address, :search_uri
     
     def initialize(email)
       @search_results = ''
       @last_query = ''
       @email_address = email
-      @search_uri = '/esearch.fcgi'
-      @fetch_uri = '/efetch.fcgi'
+      @search_uri = "#{BASE_URI}/esearch.fcgi"
+      @fetch_uri = "#{BASE_URI}/efetch.fcgi"
     end
     
     def search(query, autofetch=false, options={})
       query_options = {
-        :db => 'pubmed',
-        :retmode => 'xml',
-        :tool => 'pubmed_rb',
-        :usehistory => 'y',
-        :email => @email_address,
-        :term => query
+        "db" => 'pubmed',
+        "retmode" => 'xml',
+        "tool" => 'pubmed_rb',
+        "usehistory" => 'y',
+        "email" => @email_address,
+        "term" => query
       }.update(options)
-      doc = self.class.get(@search_uri, :query => query_options)
+      response = Typhoeus::Request.get("#{@search_uri}", :params => query_options)
+      doc = Nokogiri.parse(response.body)
+      
       results = {
         :total_found => doc.xpath("eSearchResult/Count").text,
         :query_key => doc.xpath("eSearchResult/QueryKey").text,
         :web_env => doc.xpath("eSearchResult/WebEnv").text,        
       }
       if autofetch
-        total = options.has_key?(:retmax) ? options[:retmax] : results[:total_found]
+        total = options.has_key?("retmax") ? options["retmax"] : results[:total_found]
         results[:articles] = fetch_search_results(
           results[:web_env], 
           results[:query_key], 
@@ -62,21 +55,22 @@ module PubMed
     def fetch_search_results(web_env, query_key, total)
       articles = []
       query_options = {
-        :db => 'pubmed',
-        :retmode => 'xml',
-        :tool => 'pubmed_rb',
-        :rettype => 'full',
-        :email => @email_address,
-        :WebEnv => web_env,
-        :query_key => query_key,
-        :retstart => 0,
-        :retmax => total < 500 ? total : 500
+        "db" => 'pubmed',
+        "retmode" => 'xml',
+        "tool" => 'pubmed_rb',
+        "rettype" => 'full',
+        "email" => @email_address,
+        "WebEnv" => web_env,
+        "query_key" => query_key,
+        "retstart" => 0,
+        "retmax" => total < 500 ? total : 500
       }
-      while query_options[:retstart] < total:
-        puts "Fetching results #{query_options[:retstart]} - #{query_options[:retstart]+query_options[:retmax]} ..."
-        doc = self.class.get(@fetch_uri, :query => query_options)
+      while query_options["retstart"] < total:
+        puts "Fetching results #{query_options['retstart']} - #{query_options['retstart']+query_options['retmax']} ..."
+        response = Typhoeus::Request.get(@fetch_uri, :params => query_options)
+        doc = Nokogiri.parse(response.body)
         articles += extract_articles(doc)
-        query_options[:retstart] += query_options[:retmax]
+        query_options["retstart"] += query_options["retmax"]
       end
       articles
     end
