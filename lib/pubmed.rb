@@ -153,8 +153,23 @@ module PubMed
           a[:pubdate_str] = "#{a[:pubdate_year]} #{a[:pubdate_month]} #{a[:pubdate_day]}"
         end 
         
-        a[:pubdate] = Chronic.parse "#{a[:pubdate_month]} #{a[:pubdate_day]} #{a[:pubdate_year]}"
-        # TODO: check for nil ...
+        if a[:pubdate_month].to_i != 0
+          month_name = Date::ABBR_MONTHNAMES[a[:pubdate_month].to_i]
+        else
+          month_name = a[:pubdate_month]
+        end
+        parsed_date = Chronic.parse "#{month_name} #{a[:pubdate_day]} #{a[:pubdate_year]}"
+        
+        if parsed_date.nil?
+          year = MEDLINEDATE_YEAR.match(a[:pubdate_str])
+          if year.nil?
+            a[:pubdate] = Time.parse(DateTime.new(DateTime.now.year,1,1).to_s)
+          else
+            a[:pubdate] = Time.parse(DateTime.new(year[1].to_i,1,1).to_s)
+          end
+        else
+          a[:pubdate] = parsed_date
+        end
         
         a[:citation] = a[:medline_date].empty? ? a[:pubdate].year : a[:medline_date]
         a[:citation] = a[:pubdate_season].empty? ? "#{a[:citation]} #{a[:pubdate].strftime('%b')}" : "#{a[:citation]} #{a[:pubdate_season]}"
