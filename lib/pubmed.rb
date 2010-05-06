@@ -1,9 +1,14 @@
 #!/usr/bin/env ruby
+require 'chronic'
 require 'httparty'
 require 'nokogiri'
 
 module PubMed
   class Entrez
+    
+    MEDLINEDATE_YEAR_MONTH = Regexp.new('^(\d{4}) (\w{3})[\s-]')
+    MEDLINEDATE_YEAR_SEASON = Regexp.new('^(\d{4}) (\w+)[\s-]')
+    MEDLINEDATE_YEAR = Regexp.new('^\d{4}')
     
     include HTTParty
     base_uri 'http://eutils.ncbi.nlm.nih.gov/entrez/eutils/'
@@ -29,6 +34,7 @@ module PubMed
       query_options = {
         :db => 'pubmed',
         :retmode => 'xml',
+        :tool => 'pubmed_rb',
         :usehistory => 'y',
         :email => @email_address,
         :term => query
@@ -58,6 +64,7 @@ module PubMed
       query_options = {
         :db => 'pubmed',
         :retmode => 'xml',
+        :tool => 'pubmed_rb',
         :rettype => 'full',
         :email => @email_address,
         :WebEnv => web_env,
@@ -110,17 +117,50 @@ module PubMed
         a[:volume] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/Volume').text
         a[:issue] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/Issue').text
         # -- pub date
+        a[:pubdate_year] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/Year').text
+        a[:pubdate_month] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/Month').text
+        a[:pubdate_day] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/Day').text
+        a[:pubdate_season] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/Season').text
         a[:medline_date] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/MedlineDate').text
-        if a[:medline_date] != ""
-          a[:pubdate_year] = article.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Year').text
-          a[:pubdate_month] = article.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Month').text
-          a[:pubdate_day] = article.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Day').text
+        
+        if not a[:pubdate_month].empty?
+          a[:pubdate_str] = "#{a[:pubdate_year]} #{a[:pubdate_month]} #{a[:pubdate_day]}"
+        elsif not a[:pubdate_season].empty?
+          a[:pubdate_month] = convert_season_to_month a[:pubdate_season]
+          a[:pubdate_day] = 1
+          a[:pubdate_str] = "#{a[:pubdate_year]} #{a[:pubdate_month]} #{a[:pubdate_day]}"
         else
-          a[:pubdate_year] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/Year').text
-          a[:pubdate_month] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/Month').text
-          a[:pubdate_day] = article.xpath('MedlineCitation/Article/Journal/JournalIssue/PubDate/Day').text
-        end
-        a[:pubdate] = "#{a[:pubdate_year]} #{a[:pubdate_month]} #{a[:pubdate_day]}"
+          medline_year_month = MEDLINEDATE_YEAR_MONTH.match(a[:medline_date])
+          medline_year_season = MEDLINEDATE_YEAR_SEASON.match(a[:medline_date])
+          
+          if !medline_year_month.nil?
+            src, year, month = medline_year_month.to_a
+            a[:pubdate_year] = a[:pubdate_year].empty? ? year : a[:pubdate_year]
+            a[:pubdate_month] = month
+            a[:pubdate_day] = 1
+          elsif !medline_year_season.nil?
+            src, year, season = medline_year_season.to_a              
+            a[:pubdate_year] = a[:pubdate_year].empty? ? year : a[:pubdate_year]
+            a[:pubdate_month] = convert_season_to_month season
+            a[:pubdate_day] = 1
+          else
+            # Pubmed date only used as a last resort
+            a[:pubdate_year] = article.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Year').text
+            a[:pubdate_month] = article.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Month').text
+            a[:pubdate_day] = article.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Day').text
+          end
+          
+          a[:pubdate_str] = "#{a[:pubdate_year]} #{a[:pubdate_month]} #{a[:pubdate_day]}"
+        end 
+        
+        a[:pubdate] = Chronic.parse "#{a[:pubdate_month]} #{a[:pubdate_day]} #{a[:pubdate_year]}"
+        # TODO: check for nil ...
+        
+        a[:citation] = a[:medline_date].empty? ? a[:pubdate].year : a[:medline_date]
+        a[:citation] = a[:pubdate_season].empty? ? "#{a[:citation]} #{a[:pubdate].strftime('%b')}" : "#{a[:citation]} #{a[:pubdate_season]}"
+        a[:citation] = "#{a[:citation]}; #{a[:volume_issue]}" unless (a[:volume_issue].nil? or a[:volume_issue].empty?)
+        a[:citation] = "#{a[:citation]}: #{a[:pages]}" unless (a[:pages].nil? or a[:pages].empty?)
+        a[:citation] = "#{a[:citation]}."
         
         # MeSH headings
         a[:subjects] = []
@@ -140,6 +180,21 @@ module PubMed
         extracted_articles << a
       end
       extracted_articles
+    end
+    
+    def convert_season_to_month(season)
+      case season.downcase
+      when 'spring'
+        'Mar'
+      when 'summer'
+        'Jun'
+      when 'fall'
+        'Sep'
+      when 'winter'
+        'Dec'
+      else
+        'Jan'
+      end
     end
     
   end
